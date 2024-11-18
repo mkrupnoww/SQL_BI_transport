@@ -1,0 +1,84 @@
+WITH full_tab AS (
+    SELECT date_month, 
+           runs_delivery, 
+           cost_delivery, 
+           runs_return, 
+           cost_return, 
+           runs_warehouse, 
+           cost_warehouse, 
+           runs_trucks, 
+           costs_trucks, 
+           runs_manipulators, 
+           costs_manipulators, 
+           runs_gazel, 
+           costs_gazel,
+           own_hired
+    FROM compare_variant.all_transport_full atf
+), 
+cost_run_tab AS (
+    SELECT date_month,
+           round(cost_delivery / NULLIF(runs_delivery, 0)) AS cost_run_delivery,
+           round(cost_return / NULLIF(runs_return, 0)) AS cost_run_return,
+           round(cost_warehouse / NULLIF(runs_warehouse, 0)) AS cost_run_warehouse,
+           round(costs_trucks / NULLIF(runs_trucks, 0)) AS cost_run_trucks,
+           round(costs_manipulators / NULLIF(runs_manipulators, 0)) AS cost_run_manipulators,
+           round(costs_gazel / NULLIF(runs_gazel, 0)) AS cost_run_gazel,
+           own_hired
+    FROM full_tab
+),
+avg_cost_tab AS (
+    SELECT own_hired,
+           round(avg(cost_run_delivery)) AS avg_cost_delivery,
+           round(avg(cost_run_return)) AS avg_cost_return,
+           round(avg(cost_run_warehouse)) AS avg_cost_warehouse,
+           round(avg(cost_run_trucks)) AS avg_cost_trucks,
+           round(avg(cost_run_manipulators)) AS avg_cost_manipulators,
+           round(avg(cost_run_gazel)) AS avg_cost_gazel
+    FROM cost_run_tab
+    GROUP BY own_hired
+),
+cost_diff_tab AS (
+    SELECT 
+        (SELECT avg_cost_delivery FROM avg_cost_tab WHERE own_hired = 'наемный') AS avg_cost_delivery_hired,
+        (SELECT avg_cost_delivery FROM avg_cost_tab WHERE own_hired = 'свой') AS avg_cost_delivery_own,
+        (SELECT avg_cost_return FROM avg_cost_tab WHERE own_hired = 'наемный') AS avg_cost_return_hired,
+        (SELECT avg_cost_return FROM avg_cost_tab WHERE own_hired = 'свой') AS avg_cost_return_own,
+        (SELECT avg_cost_warehouse FROM avg_cost_tab WHERE own_hired = 'наемный') AS avg_cost_warehouse_hired,
+        (SELECT avg_cost_warehouse FROM avg_cost_tab WHERE own_hired = 'свой') AS avg_cost_warehouse_own,
+        (SELECT avg_cost_trucks FROM avg_cost_tab WHERE own_hired = 'наемный') AS avg_cost_trucks_hired,
+        (SELECT avg_cost_trucks FROM avg_cost_tab WHERE own_hired = 'свой') AS avg_cost_trucks_own,
+        (SELECT avg_cost_manipulators FROM avg_cost_tab WHERE own_hired = 'наемный') AS avg_cost_manipulators_hired,
+        (SELECT avg_cost_manipulators FROM avg_cost_tab WHERE own_hired = 'свой') AS avg_cost_manipulators_own,
+        (SELECT avg_cost_gazel FROM avg_cost_tab WHERE own_hired = 'наемный') AS avg_cost_gazel_hired,
+        (SELECT avg_cost_gazel FROM avg_cost_tab WHERE own_hired = 'свой') AS avg_cost_gazel_own
+    FROM avg_cost_tab
+),
+final_result AS (
+    SELECT avg_cost_delivery AS "Cредняя стоимость одного рейса", 'Доставка' AS "Тип детализации", own_hired AS "свой / наемный" FROM avg_cost_tab
+    UNION 
+    SELECT avg_cost_return AS "Cредняя стоимость одного рейса", 'Возврат', own_hired FROM avg_cost_tab
+    UNION 
+    SELECT avg_cost_warehouse AS "Cредняя стоимость одного рейса", 'Склад', own_hired FROM avg_cost_tab
+    UNION 
+    SELECT avg_cost_trucks AS "Cредняя стоимость одного рейса", 'Фура', own_hired FROM avg_cost_tab
+    UNION 
+    SELECT avg_cost_manipulators AS "Cредняя стоимость одного рейса", 'Манипулятор', own_hired FROM avg_cost_tab
+    UNION 
+    SELECT avg_cost_gazel AS "Cредняя стоимость одного рейса", 'Газель', own_hired FROM avg_cost_tab
+)
+SELECT ROW_NUMBER() OVER (ORDER BY 
+    CASE "Тип детализации"
+        WHEN 'Доставка'  THEN 1 
+        WHEN 'Возврат' THEN 2
+        WHEN 'Склад' THEN 3
+        WHEN 'Фура' THEN 4
+        WHEN 'Манипулятор' THEN 5
+        WHEN 'Газель' THEN 6
+        ELSE 7
+    END, 
+    "Cредняя стоимость одного рейса"
+) AS "номер_строки",
+       *
+FROM final_result
+ORDER BY "номер_строки";
+
